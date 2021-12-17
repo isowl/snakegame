@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            border: 0;
+        }
+        #gameBackground {
+            inline-size: 800px;
+            block-size: 800px;
+            background-color:gray; 
+            position: relative;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #score {
+            inline-size: 796px;
+            block-size: 40px;
+            font-size: 2em;
+            font-weight: bold;
+            color: purple;
+            border: 2px solid seagreen;
+            position: relative;
+            top: 800px;
+        }
+        #gameOverPanel {
+            width: inherit; 
+            height: inherit;
+            opacity: 0.7;
+            background-color: black;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 5;
+            visibility:hidden;
+            display: flex;
+            flex-wrap: wrap;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+       #res {
+           height: 70px;
+           width: 160px;
+           background-color: white;
+           font-size: 2rem;
+           font-weight: bold;
+           text-align: center;
+           line-height: 70px;
+           border-radius: 16px;
+           box-shadow: -4px 4px  gray;
+        }
+       #res:hover {
+            cursor: pointer;
+            color:blueviolet; 
+        }
+        #gameOverPanel > div:nth-child(1) {
+            width: 200px;
+            height: 200px;
+            color: tomato;
+            font-size: 4rem;
+            font-weight: bold;
+        }
+        #gameOverPanel > div:nth-child(2) {
+            width: 600px;
+            height: 80px;
+            font-size: 2rem;
+            font-weight: bold;
+            color: gainsboro;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameBackground">
+        <div id="gameOverPanel">
+            <div>GAME OVER</div>
+            <div>score: 0</div>
+            <div id="res">restart</div>
+        </div>
+    <div id="score">score: 0</div>
+    </div>
+    <script>
+        class Tools {
+            //游戏面板
+            static Panel = {width: 800, height: 800}
+            //获取页面上的元素节点
+            static parentNode = document.getElementById("gameBackground");
+            static gvPanel = document.getElementById("gameOverPanel");
+            static restart = document.getElementById("res")
+            static scoreNode = document.getElementById("score");
+            //单元格尺寸
+            static cell = {squareLength: 40} 
+            //蛇的初始化状态
+            static initialSnakeHead = {
+                x: 40,
+                y: 0, 
+                backgroundColor: 'yellow', 
+                nextActions: null
+            }
+            static snakeCells = [{x: 0, y: 0}, {x: 0, y: 40}, {x: 0, y: 80}];
+            //食物初始化状态
+            static initialFood = {
+                x: 0, 
+                y: 0, 
+                backgroundColor: 'red'
+            }
+            static direction = {
+                LEFT: 'left',
+                RIGHT: 'right',
+                UP: 'up',
+                DOWN: 'down'
+            }
+            //获取随机整数
+            static getRandomInt(min, max) {
+                min = Math.ceil(min)
+                max = Math.floor(max)
+                return Math.floor(Math.random() * (max - min)) + min;
+            }
+            //获取随机rgb颜色值
+            static getRandomColor() {
+                return `rgb(${this.getRandomInt(0, 255)}, ${this.getRandomInt(0, 255)}, ${this.getRandomInt(0, 255)})`
+            }
+            //单轴单元格最大数量
+            static amountCell(panelSize = this.Panel, cell = this.cell) {
+                const amountAxisX = panelSize.width / cell.squareLength;
+                const amountAxisY = panelSize.height / cell.squareLength; 
+                return {
+                    amountAxisX,
+                    amountAxisY
+                }
+            }
+        }
+        //------------------------------------------------游戏逻辑---------------------------------------------
+        class GameLogical {
+            static scores = 0;
+            static autoAction = "right";
+            //记分
+            static score() {
+                return this.scores += 10; 
+            }
+            //蛇对面板的最大最小边界
+            static judgeBoundary() {
+                const squareLength = Tools.cell.squareLength;
+                const amountX = Tools.amountCell().amountAxisX;
+                const amountY = Tools.amountCell().amountAxisY;
+                const minBoundary = 0;
+                const maxBoundaryX = (amountX - 1) * squareLength;
+                const maxBoundaryY = (amountY - 1) * squareLength;
+                return {
+                    minBoundary,
+                    maxBoundaryX,
+                    maxBoundaryY
+                }
+            }
+            // 蛇与食物的位置判断
+            static eat(snake, food, scoreNode = Tools.scoreNode) {
+                const snakeCoor = {x: snake.options.x, y: snake.options.y};
+                const foodCoor = {x: food.options.x, y: food.options.y};
+
+                if (snakeCoor.x === foodCoor.x && snakeCoor.y === foodCoor.y) {
+                    //吃到食物
+                    //移除食物
+                    food.foodRemove()
+                    scoreNode.innerHTML = 'score: ' + this.score();
+                    //随机又产生一个食物
+                    food.createFood()
+                    //蛇增长
+                    snake.isGrow = true;
+                } return;
+            }
+            //游戏结束面板弹出
+            static gameOverPanel (panel = Tools.gvPanel, resBtn = Tools.restart) {
+                panel.style.visibility = 'visible';
+                resBtn.previousElementSibling.innerHTML = 'score: ' + this.scores;
+                resBtn.onclick = function () {
+                    location.reload();
+                }
+                clearInterval(this.auto);
+                document.onkeydown = '';
+            }
+            //自动移动的定时器， 单方向
+            static autoMove(snake, food, action = this.autoAction) {
+                 GameLogical.auto = setInterval(() => {
+                    snake.bolsterMove(action)
+                    GameLogical.eat(snake, food);
+                }, 600)
+            }
+            //处理不同方向的自动移动
+            static dealAuto (snake, food, action = GameLogical.autoAction) {
+                //改变autoAction
+                if (!(this.auto === undefined)) {
+                    //当前动作是否与autoAction 相等， 如果相等直接执行移动函数和eat函数
+                    //否则清除上一次的定时器，改变autoAction;
+                    if (action === GameLogical.autoAction) {
+                        snake.bolsterMove(action);
+                        GameLogical.eat(snake, food);
+                    };
+                    clearInterval(this.auto);
+                    GameLogical.autoAction = action;
+                }
+                GameLogical.autoMove(snake, food);
+
+            }
+            //在自动移动过程中对蛇的反向动作过滤
+            static compare(snake, action, autoAction) {
+                const nextActions = snake.options.nextActions;
+
+                if (nextActions === null) return true;
+                if (snake.existActionInNextActions(action, nextActions)) {
+                    return true;
+                } 
+                return false;
+            }
+            //键盘事件检测
+            static keyEvent(snake, food) {
+                const {LEFT, RIGHT, UP, DOWN} = Tools.direction;
+                const scoreNode = Tools.scoreNode;
+                //蛇自动移动的初始化方向
+                GameLogical.dealAuto(snake, food);
+
+                document.onkeydown = function (event) {
+                    const autoAction = GameLogical.autoAction;
+
+                    switch (event.keyCode) {
+                        case 38: 
+                            GameLogical.compare(snake, UP, autoAction) && 
+                            GameLogical.dealAuto(snake, food, UP) 
+                            break;
+                        case 40:
+                            GameLogical.compare(snake, DOWN, autoAction) && 
+                            GameLogical.dealAuto(snake, food, DOWN) 
+                            break
+                        case 37:
+                            GameLogical.compare(snake, LEFT, autoAction) && 
+                            GameLogical.dealAuto(snake, food, LEFT) 
+                            break;
+                        case 39:
+                            GameLogical.compare(snake, RIGHT, autoAction) && 
+                            GameLogical.dealAuto(snake, food, RIGHT) 
+                            break;
+                        default: return;
+                    }
+                }
+            }
+        }
+        //-----------------------------------------蛇-------------------------------------------------------
+        class Snake {
+            isGrow = false;
+            constructor(options = Tools.initialSnakeHead) {
+                this.options = options
+            }
+            //渲染蛇头
+            renderHead(panel = Tools.parentNode) {
+                const squareLength = Tools.cell.squareLength;
+                const {x, y, backgroundColor} = this.options;
+
+                const newSquare = document.createElement("div");
+
+                let sstyle = newSquare.style;
+                newSquare.setAttribute('class', 'head');
+                sstyle.position = 'absolute';
+                sstyle.zIndex = 2;
+                sstyle.top = y + 'px';
+                sstyle.left = x + 'px';
+                sstyle.width = squareLength + 'px';
+                sstyle.height = squareLength + 'px';
+                sstyle.backgroundColor = backgroundColor;
+                panel.appendChild(newSquare);
+            }
+            //渲染蛇的身体
+            renderBody(oldCoor, panel = Tools.parentNode) {
+                const squareLength = Tools.cell.squareLength;
+
+                //蛇的身体的初始化
+                oldCoor === undefined ?
+                this.bodyStyle(Tools.snakeCells, panel) :
+                //有新的动作时重新渲染身体
+                this.bodyStyle(this.dealHeadCoor(oldCoor, Tools.snakeCells));
+            }
+            bodyStyle(bodyArr, parentNode = Tools.parentNode) {
+                const squareLength = Tools.cell.squareLength;
+                const length = bodyArr.length;
+
+                for (let i = 0; i < length; i++) {
+                    const newNode = document.createElement("div");
+
+                    newNode.setAttribute('class', 'body');
+                    newNode.style.position = 'absolute';
+                    newNode.zIndex = 1;
+                    newNode.style.top = bodyArr[i].y + 'px';
+                    newNode.style.left = bodyArr[i].x + 'px';
+                    newNode.style.width = squareLength + 'px';
+                    newNode.style.height = squareLength + 'px';
+                    newNode.style.backgroundColor = 'blue';
+                    parentNode.appendChild(newNode);
+                }
+            }
+            //处理蛇在移动过程中不断改变的身体坐标
+            dealHeadCoor(headCoor, bodyArr) {
+                const {x, y} = this.options;
+
+                if (x === headCoor.x && y === headCoor.y) return bodyArr; 
+                //判断蛇身是否增长，如果增长则不对身体数组最后一项进行删除
+                (!this.isGrow) && bodyArr.pop(bodyArr[length - 1]);
+                this.isGrow && (this.isGrow = false); 
+                bodyArr.unshift(headCoor);
+                return bodyArr;
+            }
+            //移除蛇头元素
+            clearHeadEle(panel = Tools.parentNode) {
+                const heads = document.getElementsByClassName("head")
+
+                if (heads.length === 0) return;
+                panel.removeChild(heads[0])
+            }
+            //移除蛇的身体元素
+            clearBodyEle(panel = Tools.parentNode) {
+                const bodys = document.getElementsByClassName("body");
+
+                if (bodys.length === 0) return;
+                for (let i = bodys.length - 1; i >= 0; i--) {
+                    panel.removeChild(bodys[i])
+                }
+            }
+            //当前蛇头的朝向
+            headDirection(headCoor, bodyFirstCoor = Tools.snakeCells[0]) {
+                const {LEFT, RIGHT, UP, DOWN} = Tools.direction;
+
+                if (headCoor.y === bodyFirstCoor.y) {
+                    if (headCoor.x < bodyFirstCoor.x) return LEFT;  
+                    return RIGHT;
+                } else {
+                    if (headCoor.y < bodyFirstCoor.y) return UP;
+                    return DOWN;
+                }
+            }
+            //为head实例接下来可以做的动作nextActions添加动作
+            addActions(headDirection) {
+                const {LEFT, RIGHT, UP, DOWN} = Tools.direction;
+                const actionsX = {LEFT, RIGHT}
+                const actionsY = {UP, DOWN}
+                let nextActions = {};
+
+                switch (headDirection) {
+                    case UP:
+                        nextActions = {UP, ...actionsX};
+                        break;
+                    case DOWN:
+                        nextActions = {DOWN, ...actionsX};
+                        break;
+                    case LEFT:
+                        nextActions = {LEFT, ...actionsY};
+                        break;
+                    case RIGHT:
+                        nextActions = {RIGHT, ...actionsY}
+                        break;
+                    default: return;
+                }
+                return nextActions;
+            }
+            //边界的判断及对蛇出界时阻止
+            preventBoundary (action, Coor) {
+                const {LEFT, RIGHT, UP, DOWN} = Tools.direction;
+                const {minBoundary, maxBoundaryX, maxBoundaryY} = GameLogical.judgeBoundary();
+                const {x, y} = Coor;
+                let stopRender = false;
+
+                switch (action) {
+                    case UP:
+                        (y <= minBoundary) && (stopRender = true)  && GameLogical.gameOverPanel();
+                        break;
+                    case DOWN:
+                        (y >= maxBoundaryY) && (stopRender = true) && GameLogical.gameOverPanel();
+                        break;
+                    case LEFT:
+                        (x <= minBoundary) && (stopRender = true) && GameLogical.gameOverPanel(); 
+                        break;
+                    case RIGHT:
+                        (x >= maxBoundaryX) && (stopRender = true) && GameLogical.gameOverPanel();
+                        break;
+                    default: return;
+                }
+                return stopRender;
+            }
+            //判断当前动作是否可以在动作集合中找到
+            existActionInNextActions(action, nextActions) {
+                for (let nextAction in nextActions) {
+                    if (action === nextActions[nextAction]) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            //加强版 控制蛇的移动
+            bolsterMove(action, nextActions, Coor = {x: this.options.x, y: this.options.y}) {
+                const {LEFT, RIGHT, DOWN, UP} = Tools.direction;
+                
+                nextActions = this.options.nextActions || {RIGHT, DOWN, UP};
+                //蛇是否出界， 出界直接停止后续动作
+                const stopRender = this.preventBoundary(action, Coor);
+                if (stopRender) return;
+                //判断当前动作能否在nextAcions中找到
+                const isExist = this.existActionInNextActions(action, nextActions);
+                
+                if (isExist) {
+                    //如果找到， 执行move 函数， 即蛇移动
+                    const newCoor = this.move(action, Coor);
+                    const headDirection = this.headDirection(newCoor);
+
+                    nextActions = this.addActions(headDirection);
+                    this.options.nextActions = nextActions;
+                } return;
+            }
+            //蛇头的控制
+            move(action, oldCoor) {
+                const squareLength = Tools.cell.squareLength;
+                const {minBoundary, maxBoundaryX, maxBoundaryY} = GameLogical.judgeBoundary();
+                const {LEFT, RIGHT, UP, DOWN} = Tools.direction;
+
+                let {x, y} = oldCoor; 
+
+                switch (action) {
+                    case LEFT:
+                        x -= squareLength;
+                        break;
+                    case RIGHT:
+                        x += squareLength;
+                        break;
+                    case UP:
+                        y -= squareLength;
+                        break;
+                    case DOWN:
+                        y += squareLength;
+                        break;
+                    default: return;
+                }
+                this.options.x = x;
+                this.options.y = y;
+                this.clearHeadEle()
+                this.clearBodyEle()
+                this.renderHead()
+                this.renderBody(oldCoor)
+                this.headCollideBody();
+                return {x, y}
+            }
+            //蛇头是否触碰到蛇身， 如果是停止移动，弹出结束面板
+            headCollideBody(head = {x: this.options.x, y: this.options.y}, bodys = Tools.snakeCells) {
+                for (let value of bodys) {
+                    if (head.x === value.x && head.y === value.y) {
+                        GameLogical.gameOverPanel()
+                    }
+                }
+            }
+        }
+        //---------------------------------------------------食物--------------------------------------------
+        class Food  {
+            constructor(options = Tools.initialFood) {
+                this.options = options
+            }
+            //创建一个食物
+            createFood(panel = Tools.parentNode) {
+                const squareLength = Tools.cell.squareLength;
+                const newFood = document.createElement("div");
+                let fstyle = newFood.style;
+                let {x, y} = this.randomPlace();
+
+                newFood.setAttribute('id', 'food');
+                fstyle.position = 'absolute';
+                fstyle.zIndex = 2;
+                fstyle.width = squareLength + 'px'
+                fstyle.height = squareLength + 'px'
+                fstyle.top = y + 'px'
+                fstyle.left = x + 'px'
+                fstyle.backgroundColor = Tools.getRandomColor()
+
+                fstyle.lineHeight = squareLength + 'px';
+                fstyle.textAlign = 'center';
+                panel.appendChild(newFood);
+            }
+            //食物的随机位置与背景色
+            randomPlace() {
+                const squareLength = Tools.cell.squareLength;
+
+                this.options.x = Tools.getRandomInt(0, Tools.amountCell().amountAxisX) * squareLength;
+                this.options.y = Tools.getRandomInt(0, Tools.amountCell().amountAxisY) * squareLength;
+                this.options.backgroundColor = Tools.getRandomColor();
+                return {
+                    x: this.options.x,
+                    y: this.options.y
+                }
+            }
+            //食物的移除
+            foodRemove(panel = Tools.parentNode) {
+                const food = document.getElementById("food");
+
+                if (food === null) return;
+                panel.removeChild(food)
+            }
+        }
+
+
+        // ---------------------------------------------------------------------------------------------------
+        const rat = new Food()
+        const newSnake = new Snake()
+        newSnake.renderHead()
+        newSnake.renderBody()
+        rat.createFood()
+        GameLogical.keyEvent(newSnake, rat);
+    </script>
+</body>
+</html>
