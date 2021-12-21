@@ -185,6 +185,7 @@
                 }
                 clearInterval(this.auto);
                 document.onkeydown = '';
+                return;
             }
             //自动移动的定时器， 单方向
             static autoMove(snake, food, action = this.autoAction) {
@@ -202,6 +203,7 @@
                     if (action === GameLogical.autoAction) {
                         snake.bolsterMove(action);
                         GameLogical.eat(snake, food);
+                        return;
                     };
                     clearInterval(this.auto);
                     GameLogical.autoAction = action;
