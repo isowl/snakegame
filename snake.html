@@ -311,8 +311,9 @@
 
                 if (x === headCoor.x && y === headCoor.y) return bodyArr; 
                 //判断蛇身是否增长，如果增长则不对身体数组最后一项进行删除
-                (!this.isGrow) && bodyArr.pop(bodyArr[length - 1]);
-                this.isGrow && (this.isGrow = false); 
+                this.isGrow
+                    ? this.isGrow = !this.isGrow
+                    : bodyArr.pop()
                 bodyArr.unshift(headCoor);
                 return bodyArr;
             }
